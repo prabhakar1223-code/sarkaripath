@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Sarkari Path
 
 A React and Node.js MVP that helps students explore government exam paths based on their age, completed education, career interests, work preferences, and study routine.
@@ -37,3 +38,6 @@ The MVP does not store submitted profiles. It asks only about comfort with roles
 npm test
 npm run build
 ```
+=======
+# sarkaripath
+>>>>>>> 388d2012efe81123894b683e750183b2877a3557
