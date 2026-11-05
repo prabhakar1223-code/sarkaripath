@@ -1,0 +1,96 @@
+
+name: Sarkari Path CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sarkari-path-deployment
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build, Push and Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout source code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Configure Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Step 3: Authenticate with Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Step 4: Build and push AMD64 Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ps2906/sarkari-container:latest
+
+      # Step 5: Connect to EC2 and deploy
+      - name: Deploy application on EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -e
+
+            echo "Starting deployment..."
+
+            # Start Docker if it is not running
+            sudo systemctl start docker
+
+            # Pull the latest image
+            sudo docker pull ps2906/sarkari-container:latest
+
+            # Remove the previous application container
+            sudo docker rm -f sarkari-app || true
+
+            # Start the updated application
+            sudo docker run -d \
+              --name sarkari-app \
+              --restart unless-stopped \
+              -p 80:3001 \
+              ps2906/sarkari-container:latest
+
+            # Verify that the container is running
+            sleep 5
+
+            if [ "$(sudo docker inspect -f '{{.State.Running}}' sarkari-app)" != "true" ]; then
+              echo "Deployment failed. Container logs:"
+              sudo docker logs sarkari-app
+              exit 1
+            fi
+
+            echo "Container is running successfully."
+
+            # Display container status
+            sudo docker ps
+
+            # Remove unused Docker images
+            sudo docker image prune -f
+
+            echo "Deployment completed successfully!"
